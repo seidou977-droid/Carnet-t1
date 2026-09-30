@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Carnet T1 — repas, insuline, glycémie</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#F6F8F7; --surface:#FFFFFF; --ink:#16232E; --muted:#5E6B75; --line:#DCE3E1;
+  --inrange:#2B8C6B; --inrange-soft:#DDF1E9; --low:#C23B2B; --low-soft:#FBE3DF; --high:#C77A12; --high-soft:#FBEFD9;
+  --insulin:#5446C2; --insulin-soft:#E7E4FA; --carb:#B8860B; --carb-soft:#F7EDD2; --focus:#1D6FD1;
+  box-sizing:border-box; padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F171C; --surface:#172229; --ink:#E8EEF0; --muted:#9AA8B1; --line:#2A3A43;
+    --inrange:#4CC495; --inrange-soft:#16382D; --low:#F07366; --low-soft:#43201C; --high:#F0A948; --high-soft:#3E2C12;
+    --insulin:#9D93F5; --insulin-soft:#262249; --carb:#E3B84A; --carb-soft:#3A3016; --focus:#6FA8F0; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F171C; --surface:#172229; --ink:#E8EEF0; --muted:#9AA8B1; --line:#2A3A43;
+  --inrange:#4CC495; --inrange-soft:#16382D; --low:#F07366; --low-soft:#43201C; --high:#F0A948; --high-soft:#3E2C12;
+  --insulin:#9D93F5; --insulin-soft:#262249; --carb:#E3B84A; --carb-soft:#3A3016; --focus:#6FA8F0; color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:inherit}
+html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;min-height:100%;background:var(--bg);color:var(--ink);font-family:"Atkinson Hyperlegible",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:17px;line-height:1.45;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--focus);outline-offset:2px}
+.wrap{max-width:640px;margin:0 auto;padding:0 16px 110px}
+.num{font-variant-numeric:tabular-nums}
+
+/* En-tête : la glycémie */
+.now{padding:20px 0 12px;display:grid;grid-template-columns:1fr auto;gap:4px 16px;align-items:end}
+.now .val{font-size:64px;font-weight:700;line-height:1;letter-spacing:-1px}
+.now .val small{font-size:18px;font-weight:400;color:var(--muted);letter-spacing:0;margin-left:6px}
+.now .meta{grid-column:1/-1;color:var(--muted);font-size:15px}
+.now .trend{font-size:40px;line-height:1}
+.state-in{color:var(--inrange)} .state-low{color:var(--low)} .state-high{color:var(--high)} .state-none{color:var(--muted)}
+.alert{margin:6px 0 10px;padding:12px 14px;border-radius:10px;background:var(--low-soft);color:var(--low);font-weight:700}
+.alert span{display:block;font-weight:400;color:var(--ink);font-size:15px;margin-top:2px}
+
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:6px 0 18px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.tile b{display:block;font-size:22px}
+.tile span{font-size:13px;color:var(--muted)}
+.tile.carb b{color:var(--carb)} .tile.ins b{color:var(--insulin)} .tile.tir b{color:var(--inrange)}
+
+h2{font-size:21px;margin:22px 0 10px}
+h3{font-size:17px;margin:16px 0 8px}
+p.hint{color:var(--muted);font-size:15px;margin:4px 0 12px}
+
+.daynav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:8px 0}
+.daynav strong{font-size:18px;text-transform:capitalize}
+.iconbtn{background:var(--surface);border:1px solid var(--line);border-radius:10px;min-width:44px;height:44px;font-size:20px}
+.iconbtn:disabled{opacity:.35;cursor:default}
+
+.chart{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:8px 4px 4px;overflow-x:auto}
+.chart svg{display:block;width:100%;height:auto;min-width:320px}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--muted);padding:6px 10px 4px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+
+.list{list-style:none;margin:0;padding:0}
+.item{display:flex;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:0}
+.item .time{width:48px;flex:none;color:var(--muted);font-size:15px}
+.item .body{flex:1;min-width:0}
+.item .body .t{font-weight:700}
+.item .body .s{color:var(--muted);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.item .amt{font-weight:700;font-size:18px;flex:none;text-align:right}
+.item button.row{all:unset;display:flex;gap:12px;align-items:center;width:100%;cursor:pointer}
+.item button.row:focus-visible{outline:3px solid var(--focus);outline-offset:2px;border-radius:6px}
+.thumb{width:52px;height:52px;border-radius:8px;flex:none;background:var(--carb-soft);object-fit:cover;display:grid;place-items:center;color:var(--carb);font-size:22px}
+.dot{width:52px;height:52px;border-radius:8px;flex:none;display:grid;place-items:center;font-weight:700;font-size:14px}
+.dot.ins{background:var(--insulin-soft);color:var(--insulin)}
+.dot.glu{background:var(--inrange-soft);color:var(--inrange)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px 14px}
+.empty{padding:22px 4px;color:var(--muted);text-align:center}
+
+/* Barre d'onglets */
+.tabs{position:fixed;left:0;right:0;bottom:0;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);z-index:20}
+.tabs .in{max-width:640px;margin:0 auto;display:grid;grid-template-columns:repeat(5,1fr)}
+.tabs button{background:none;border:0;padding:9px 2px 10px;font-size:12px;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px}
+.tabs button svg{width:24px;height:24px}
+.tabs button[aria-current="page"]{color:var(--ink);font-weight:700}
+.tabs button.add{color:var(--carb)}
+
+/* Boutons, champs */
+.btn{border:0;border-radius:10px;padding:12px 16px;font-weight:700;background:var(--ink);color:var(--bg);min-height:48px}
+.btn.sec{background:var(--surface);color:var(--ink);border:1px solid var(--line)}
+.btn.carb{background:var(--carb);color:#fff}
+.btn.ins{background:var(--insulin);color:#fff}
+.btn.danger{background:none;color:var(--low);border:1px solid var(--low)}
+.btn.block{width:100%}
+.btn:disabled{opacity:.5}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+label.f{display:block;font-size:14px;color:var(--muted);margin:12px 0 4px}
+input.i,select.i,textarea.i{width:100%;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:11px 12px;min-height:48px}
+textarea.i{min-height:70px;resize:vertical}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:8px 13px;font-size:15px;min-height:40px}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chips.scroll{flex-wrap:nowrap;overflow-x:auto;padding-bottom:4px}
+.chips.scroll .chip{flex:none}
+
+/* Feuille modale */
+.sheet-bg{position:fixed;inset:0;background:rgba(10,18,24,.5);z-index:40;display:flex;align-items:flex-end;justify-content:center}
+.sheet{background:var(--surface);width:100%;max-width:640px;max-height:92%;overflow-y:auto;border-radius:18px 18px 0 0;padding:8px 16px calc(24px + env(safe-area-inset-bottom,0px));animation:up .22s ease-out}
+@media (prefers-reduced-motion:reduce){.sheet{animation:none}}
+@keyframes up{from{transform:translateY(40px);opacity:.4}to{transform:none;opacity:1}}
+.sheet-head{display:flex;align-items:center;justify-content:space-between;position:sticky;top:-8px;background:var(--surface);padding:10px 0;z-index:2}
+.sheet-head h2{margin:0}
+.photo-drop{display:flex;align-items:center;justify-content:center;gap:10px;border:2px dashed var(--line);border-radius:12px;min-height:120px;color:var(--muted);background:var(--bg);width:100%;overflow:hidden;padding:0}
+.photo-drop img{width:100%;max-height:260px;object-fit:cover;display:block}
+.line{display:grid;grid-template-columns:1fr 84px 60px 32px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.line .n{font-size:15px;line-height:1.25}
+.line .n small{display:block;color:var(--muted)}
+.line input{padding:8px;min-height:42px;text-align:right}
+.line .c{text-align:right;font-weight:700;color:var(--carb)}
+.line .x{background:none;border:0;color:var(--muted);font-size:20px;height:42px}
+.results{border:1px solid var(--line);border-radius:10px;margin-top:6px;max-height:260px;overflow-y:auto}
+.results button{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:11px 12px}
+.results button:last-child{border-bottom:0}
+.results small{color:var(--muted)}
+.total{display:flex;justify-content:space-between;align-items:baseline;margin:14px 0 4px;font-size:18px}
+.total b{font-size:30px;color:var(--carb)}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;margin:12px 0}
+.food{display:flex;justify-content:space-between;gap:10px;padding:11px 0;border-bottom:1px solid var(--line)}
+.food:last-child{border-bottom:0}
+.food .g{font-weight:700;color:var(--carb);white-space:nowrap;text-align:right}
+.food small{display:block;color:var(--muted);font-weight:400}
+.toast{position:fixed;left:50%;bottom:calc(84px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:10px;z-index:60;font-size:15px;max-width:90%}
+.stats{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}
+.bar{display:flex;height:14px;border-radius:7px;overflow:hidden;margin:8px 0 4px}
+.bar i{display:block;height:100%}
+.foot{color:var(--muted);font-size:13px;margin:26px 0 0}
+.hidden{display:none!important}
+.meal-photo{width:100%;border-radius:12px;max-height:320px;object-fit:cover;margin:6px 0}
+</style>
+</head>
+<body>
+<main class="wrap" id="app" aria-live="polite">
+  <p class="empty">Chargement du carnet…</p>
+</main>
+<nav class="tabs" aria-label="Sections">
+  <div class="in">
+    <button data-tab="journal" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 17l5-6 4 3 5-7 4 4"/></svg>Journal</button>
+    <button data-tab="glucose"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 3c3 4.5 6 7.6 6 11a6 6 0 0 1-12 0c0-3.4 3-6.5 6-11z"/></svg>Glycémie</button>
+    <button data-tab="meal" class="add"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>Repas</button>
+    <button data-tab="insulin"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M17 3l4 4M19 5l-9 9M14 6l4 4M6 14l4 4M4 20l3-3M8 12l4 4"/></svg>Insuline</button>
+    <button data-tab="foods"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 5h16M4 12h16M4 19h10"/></svg>Aliments</button>
+  </div>
+</nav>
+
+<script>
+/* ============ Base d'aliments (valeurs indicatives, glucides pour 100 g ou 100 ml) ============ */
+const CATS={pain:"Pains & viennoiseries",pdj:"Petit-déjeuner",fec:"Féculents",leg:"Légumes",fruit:"Fruits",lait:"Laitages & fromages",prot:"Viandes, poissons, œufs",plat:"Plats cuisinés",maghreb:"Cuisine du Maghreb",dessert:"Desserts & sucré",boisson:"Boissons",snack:"Apéritif & snacks",sauce:"Sauces & condiments"};
+const F=[
+["Baguette","pain",56,50,"1/5 de baguette"],["Baguette tradition","pain",55,50,"1/5 de baguette"],["Pain de campagne","pain",50,40,"1 tranche"],["Pain complet","pain",44,40,"1 tranche"],["Pain aux céréales","pain",45,40,"1 tranche"],["Pain de seigle","pain",46,40,"1 tranche"],["Pain de mie","pain",49,25,"1 tranche"],["Pain de mie complet","pain",43,25,"1 tranche"],["Pain au lait","pain",52,35,"1 pain au lait"],["Pain burger","pain",50,60,"1 pain"],["Pain pita","pain",55,60,"1 pita"],["Tortilla de blé","pain",50,60,"1 galette"],["Biscotte","pain",73,10,"1 biscotte"],["Pain grillé suédois","pain",68,10,"1 tranche"],["Galette de riz soufflé","pain",80,8,"1 galette"],["Croissant","pain",44,45,"1 croissant"],["Pain au chocolat","pain",46,65,"1 pain au chocolat"],["Pain aux raisins","pain",48,90,"1 pain aux raisins"],["Chausson aux pommes","pain",36,100,"1 chausson"],["Brioche","pain",50,35,"1 tranche"],["Brioche tressée","pain",52,40,"1 part"],["Pain d'épices","pain",71,30,"1 tranche"],["Chouquette","pain",45,10,"1 chouquette"],
+["Flocons d'avoine","pdj",58,40,"4 c. à soupe"],["Muesli","pdj",64,40,"1 bol"],["Corn flakes","pdj",84,30,"1 bol"],["Céréales au chocolat","pdj",75,30,"1 bol"],["Céréales fourrées","pdj",68,30,"1 bol"],["Granola","pdj",60,40,"1 bol"],["Pétales de blé complet","pdj",70,30,"1 bol"],
+["Pâtes cuites","fec",30,200,"1 assiette"],["Pâtes complètes cuites","fec",26,200,"1 assiette"],["Pâtes fraîches cuites","fec",31,200,"1 assiette"],["Riz blanc cuit","fec",29,150,"1 portion"],["Riz basmati cuit","fec",28,150,"1 portion"],["Riz complet cuit","fec",24,150,"1 portion"],["Semoule cuite","fec",23,150,"1 portion"],["Boulgour cuit","fec",18,150,"1 portion"],["Quinoa cuit","fec",19,150,"1 portion"],["Blé type Ebly cuit","fec",27,150,"1 portion"],["Lentilles cuites","fec",16,150,"1 portion"],["Pois chiches cuits","fec",17,150,"1 portion"],["Haricots rouges cuits","fec",14,150,"1 portion"],["Haricots blancs cuits","fec",15,150,"1 portion"],["Flageolets cuits","fec",13,150,"1 portion"],["Pommes de terre vapeur","fec",17,150,"2 pommes de terre moyennes"],["Pommes de terre au four","fec",21,150,"1 portion"],["Purée de pommes de terre","fec",13,200,"1 portion"],["Frites","fec",32,150,"1 portion moyenne"],["Frites au four surgelées","fec",27,150,"1 portion"],["Pommes sautées","fec",22,150,"1 portion"],["Pommes noisettes","fec",28,120,"1 portion"],["Patate douce cuite","fec",17,150,"1 portion"],["Gnocchis","fec",32,150,"1 portion"],["Maïs doux","fec",15,80,"1/2 boîte"],["Petits pois cuits","fec",9,100,"1 portion"],["Châtaignes cuites","fec",36,100,"1 portion"],["Polenta cuite","fec",15,150,"1 portion"],["Nouilles asiatiques cuites","fec",26,200,"1 portion"],["Vermicelles de riz cuits","fec",24,150,"1 portion"],["Farine de blé","fec",73,10,"1 c. à soupe"],
+["Carottes cuites","leg",6,100,"1 portion"],["Carottes râpées","leg",7,100,"1 ramequin"],["Courgettes","leg",2,150,"1 portion"],["Haricots verts","leg",4,150,"1 portion"],["Tomate","leg",3,120,"1 tomate"],["Salade verte","leg",1,50,"1 portion"],["Brocoli","leg",2,150,"1 portion"],["Chou-fleur","leg",3,150,"1 portion"],["Épinards","leg",1,150,"1 portion"],["Poireaux","leg",4,150,"1 portion"],["Champignons","leg",1,100,"1 portion"],["Poivron","leg",5,100,"1/2 poivron"],["Concombre","leg",2,100,"1/3 concombre"],["Aubergine","leg",3,150,"1 portion"],["Betterave cuite","leg",8,100,"1 portion"],["Endives","leg",2,100,"1 endive"],["Ratatouille","leg",5,200,"1 portion"],["Potage de légumes","leg",5,250,"1 bol"],["Velouté de potiron","leg",5,250,"1 bol"],["Soupe de légumes avec pomme de terre","leg",7,250,"1 bol"],["Artichaut","leg",6,120,"1 fond"],["Avocat","leg",1,100,"1/2 avocat"],["Oignon","leg",7,50,"1/2 oignon"],["Céleri rémoulade","leg",4,100,"1 ramequin"],
+["Pomme","fruit",12,150,"1 pomme moyenne"],["Poire","fruit",12,150,"1 poire"],["Banane","fruit",20,120,"1 banane (sans peau)"],["Orange","fruit",8,150,"1 orange"],["Clémentine","fruit",9,60,"1 clémentine"],["Kiwi","fruit",10,80,"1 kiwi"],["Raisin","fruit",16,125,"1 grappe"],["Fraises","fruit",6,150,"1 barquette"],["Framboises","fruit",5,125,"1 barquette"],["Myrtilles","fruit",10,125,"1 barquette"],["Cerises","fruit",14,125,"1 bol"],["Abricot","fruit",9,45,"1 abricot"],["Pêche","fruit",9,150,"1 pêche"],["Nectarine","fruit",10,150,"1 nectarine"],["Prune","fruit",10,40,"1 prune"],["Mirabelles","fruit",14,100,"1 poignée"],["Melon","fruit",7,200,"1/2 melon"],["Pastèque","fruit",7,250,"1 tranche"],["Ananas","fruit",11,150,"2 tranches"],["Mangue","fruit",13,150,"1/2 mangue"],["Pamplemousse","fruit",7,200,"1/2 pamplemousse"],["Figue fraîche","fruit",16,50,"1 figue"],["Litchis","fruit",16,100,"10 litchis"],["Grenade","fruit",15,100,"1/2 grenade"],["Compote sans sucre ajouté","fruit",14,100,"1 pot"],["Compote sucrée","fruit",20,100,"1 pot"],["Salade de fruits au sirop","fruit",17,150,"1 coupe"],["Dattes","fruit",65,8,"1 datte"],["Abricots secs","fruit",50,8,"1 abricot sec"],["Raisins secs","fruit",63,30,"1 poignée"],["Pruneaux","fruit",55,10,"1 pruneau"],["Figues sèches","fruit",55,20,"1 figue sèche"],
+["Lait demi-écrémé","lait",5,250,"1 bol"],["Lait entier","lait",5,250,"1 bol"],["Boisson soja nature","lait",1,250,"1 bol"],["Boisson soja sucrée","lait",3,250,"1 bol"],["Boisson avoine","lait",7,250,"1 bol"],["Yaourt nature","lait",5,125,"1 pot"],["Yaourt sucré","lait",13,125,"1 pot"],["Yaourt aux fruits","lait",14,125,"1 pot"],["Yaourt à boire","lait",13,180,"1 bouteille"],["Yaourt grec nature","lait",4,150,"1 pot"],["Fromage blanc nature","lait",4,100,"1 portion"],["Fromage blanc aux fruits","lait",14,100,"1 pot"],["Petit-suisse nature","lait",4,60,"1 petit-suisse"],["Skyr nature","lait",4,150,"1 pot"],["Crème dessert chocolat","lait",20,125,"1 pot"],["Crème dessert vanille","lait",19,125,"1 pot"],["Flan nappé caramel","lait",21,100,"1 pot"],["Riz au lait","lait",22,125,"1 pot"],["Liégeois chocolat","lait",20,100,"1 pot"],["Camembert","lait",0.5,30,"1 portion"],["Comté","lait",0,30,"1 portion"],["Emmental","lait",0,30,"1 portion"],["Fromage de chèvre","lait",1,30,"1 portion"],["Roquefort","lait",0,30,"1 portion"],["Mozzarella","lait",1,60,"1/2 boule"],["Fromage fondu en portion","lait",5,20,"1 portion"],["Crème fraîche","lait",3,30,"2 c. à soupe"],["Beurre","lait",0.6,10,"1 noisette"],
+["Viande, volaille ou poisson nature","prot",0,120,"1 portion"],["Œufs","prot",0.5,50,"1 œuf"],["Jambon blanc","prot",1,45,"1 tranche"],["Saucisson sec","prot",2,30,"quelques rondelles"],["Pâté de campagne","prot",2,50,"1 tranche"],["Saucisse de Toulouse","prot",1,120,"1 saucisse"],["Merguez","prot",1,60,"1 merguez"],["Knacki","prot",2,35,"1 saucisse"],["Poisson pané","prot",18,100,"1 filet"],["Nuggets de poulet","prot",17,120,"6 nuggets"],["Cordon bleu","prot",13,100,"1 cordon bleu"],["Surimi","prot",14,50,"3 bâtonnets"],["Thon en boîte","prot",0,80,"1 petite boîte"],["Tofu nature","prot",2,100,"1 portion"],["Steak végétal","prot",8,100,"1 steak"],
+["Quiche lorraine","plat",19,150,"1 part"],["Pizza margherita","plat",28,150,"1/2 pizza"],["Pizza reine","plat",27,150,"1/2 pizza"],["Pizza 4 fromages","plat",26,150,"1/2 pizza"],["Croque-monsieur","plat",23,150,"1 croque"],["Sandwich jambon-beurre","plat",40,175,"1/2 baguette"],["Sandwich poulet crudités","plat",32,200,"1 sandwich"],["Hamburger","plat",25,220,"1 burger"],["Kebab (galette ou pain)","plat",25,350,"1 kebab"],["Tacos français","plat",24,400,"1 tacos"],["Hachis parmentier","plat",11,300,"1 portion"],["Gratin dauphinois","plat",12,200,"1 portion"],["Lasagnes à la bolognaise","plat",13,300,"1 portion"],["Spaghetti bolognaise","plat",17,300,"1 assiette"],["Pâtes carbonara","plat",22,300,"1 assiette"],["Couscous royal","plat",14,400,"1 assiette"],["Tajine de poulet","plat",6,350,"1 portion"],["Paëlla","plat",17,350,"1 assiette"],["Tartiflette","plat",11,300,"1 portion"],["Raclette (avec pommes de terre)","plat",10,400,"1 assiette"],["Blanquette de veau (sans riz)","plat",4,250,"1 portion"],["Bœuf bourguignon","plat",3,250,"1 portion"],["Pot-au-feu","plat",6,350,"1 assiette"],["Choucroute garnie","plat",5,400,"1 assiette"],["Cassoulet","plat",10,350,"1 assiette"],["Moussaka","plat",8,300,"1 portion"],["Chili con carne","plat",10,300,"1 portion"],["Poulet basquaise","plat",4,300,"1 portion"],["Ravioli en sauce","plat",13,300,"1 assiette"],["Galette complète (sarrasin)","plat",13,200,"1 galette"],["Galette de sarrasin nature","plat",35,60,"1 galette"],["Soupe à l'oignon gratinée","plat",8,300,"1 bol"],["Taboulé","plat",20,150,"1 portion"],["Salade niçoise","plat",3,300,"1 assiette"],["Salade de pâtes","plat",20,200,"1 portion"],["Sushis / makis","plat",28,200,"8 pièces"],["Nems","plat",25,60,"1 nem"],["Riz cantonais","plat",22,300,"1 portion"],["Poke bowl","plat",18,400,"1 bol"],["Wrap poulet","plat",28,200,"1 wrap"],["Feuilleté salé","plat",25,100,"1 feuilleté"],["Hot-dog","plat",27,150,"1 hot-dog"],["Omelette nature","plat",1,150,"1 omelette"],
+["Couscous aux légumes (graine + légumes)","maghreb",16,400,"1 assiette"],["Couscous au poulet","maghreb",15,400,"1 assiette"],["Couscous à l'agneau","maghreb",14,400,"1 assiette"],["Couscous au poisson","maghreb",15,400,"1 assiette"],["Seffa (couscous sucré)","maghreb",32,250,"1 assiette"],["Mesfouf (couscous aux raisins)","maghreb",30,200,"1 bol"],["Berkoukes","maghreb",18,300,"1 assiette"],["Chakhchoukha","maghreb",20,350,"1 assiette"],["Rechta","maghreb",20,350,"1 assiette"],["Rfissa","maghreb",22,350,"1 assiette"],["Mhadjeb","maghreb",35,120,"1 mhadjeb"],["Makrouna (pâtes en sauce)","maghreb",24,300,"1 assiette"],["Tajine de poulet aux olives et citron","maghreb",4,300,"1 portion"],["Tajine d'agneau aux pruneaux","maghreb",12,300,"1 portion"],["Tajine kefta aux œufs","maghreb",4,300,"1 portion"],["Tajine de légumes","maghreb",7,300,"1 portion"],["Tajine tunisien (au four)","maghreb",6,150,"1 part"],["Chorba frik","maghreb",7,300,"1 bol"],["Harira","maghreb",10,300,"1 bol"],["Lablabi","maghreb",13,350,"1 bol"],["Bissara","maghreb",12,300,"1 bol"],["Loubia (haricots blancs en sauce)","maghreb",12,300,"1 assiette"],["Lentilles en sauce (adès)","maghreb",12,300,"1 assiette"],["Pois chiches en sauce","maghreb",14,300,"1 assiette"],["Garantita / karantika","maghreb",18,150,"1 part"],["Chakchouka","maghreb",5,250,"1 portion"],["Ojja merguez","maghreb",4,250,"1 portion"],["Zaalouk","maghreb",6,150,"1 portion"],["Salade méchouia","maghreb",5,150,"1 portion"],["Taktouka","maghreb",5,150,"1 portion"],["Mloukhia","maghreb",3,300,"1 assiette"],["Kefta grillée","maghreb",3,120,"4 kefta"],["Pastilla au poulet","maghreb",25,200,"1 part"],["Pastilla aux fruits de mer","maghreb",20,200,"1 part"],["Brick à l'œuf","maghreb",22,100,"1 brick"],["Bourek / brik viande","maghreb",22,60,"1 bourek"],["Maakouda","maghreb",20,80,"1 maakouda"],["Khobz dar (pain maison)","maghreb",50,80,"1/4 de galette"],["Kesra / matlouh","maghreb",50,80,"1/4 de galette"],["Batbout","maghreb",50,70,"1 batbout"],["Msemen","maghreb",45,80,"1 msemen"],["Msemen au miel","maghreb",52,90,"1 msemen"],["Baghrir (crêpe mille trous)","maghreb",40,60,"1 baghrir"],["Harcha","maghreb",45,60,"1 harcha"],["Mbesses","maghreb",55,50,"1 part"],["Assida","maghreb",30,200,"1 bol"],["Makrout","maghreb",60,40,"1 makrout"],["Baklawa","maghreb",50,40,"1 baklawa"],["Cornes de gazelle","maghreb",55,30,"1 corne"],["Chebakia / griwech","maghreb",60,30,"1 pièce"],["Zlabia","maghreb",70,40,"1 zlabia"],["Kalb el louz","maghreb",55,60,"1 part"],["Basboussa","maghreb",50,60,"1 part"],["Ghribia","maghreb",60,25,"1 ghribia"],["Mhancha","maghreb",45,60,"1 part"],["Bradj","maghreb",55,50,"1 bradj"],["Sellou / sfouf","maghreb",45,30,"2 c. à soupe"],["Halwa turc (chamia)","maghreb",50,30,"1 part"],["Thé à la menthe sucré","maghreb",10,150,"1 verre"],["Lben (lait fermenté)","maghreb",5,250,"1 verre"],["Raïb sucré","maghreb",12,125,"1 pot"],["Jus de dattes / smoothie dattes","maghreb",20,250,"1 verre"],
+["Sucre","dessert",100,5,"1 morceau"],["Miel","dessert",80,15,"1 c. à soupe"],["Confiture","dessert",60,20,"1 c. à soupe"],["Confiture allégée","dessert",36,20,"1 c. à soupe"],["Pâte à tartiner chocolat-noisette","dessert",57,20,"1 c. à soupe"],["Chocolat noir 70 %","dessert",35,20,"2 carrés"],["Chocolat au lait","dessert",57,20,"2 carrés"],["Chocolat en poudre sucré","dessert",80,15,"1 c. à soupe"],["Crêpe nature","dessert",25,60,"1 crêpe"],["Crêpe au sucre","dessert",33,65,"1 crêpe"],["Gaufre","dessert",45,60,"1 gaufre"],["Madeleine","dessert",55,25,"1 madeleine"],["Biscuit sec type petit-beurre","dessert",75,8,"1 biscuit"],["Biscuit fourré chocolat","dessert",68,13,"1 biscuit"],["Cookie","dessert",63,30,"1 cookie"],["Barre chocolatée","dessert",60,50,"1 barre"],["Barre de céréales","dessert",65,25,"1 barre"],["Éclair au chocolat","dessert",30,90,"1 éclair"],["Tarte aux pommes","dessert",32,120,"1 part"],["Tarte au citron meringuée","dessert",43,120,"1 part"],["Tarte aux fraises","dessert",30,120,"1 part"],["Mille-feuille","dessert",36,120,"1 part"],["Paris-brest","dessert",32,100,"1 part"],["Macaron","dessert",60,15,"1 macaron"],["Mousse au chocolat","dessert",25,100,"1 ramequin"],["Crème brûlée","dessert",22,100,"1 ramequin"],["Île flottante","dessert",22,150,"1 portion"],["Clafoutis","dessert",25,120,"1 part"],["Far breton","dessert",35,100,"1 part"],["Kouign-amann","dessert",45,80,"1 part"],["Financier","dessert",45,30,"1 financier"],["Cannelé","dessert",50,50,"1 cannelé"],["Beignet","dessert",45,70,"1 beignet"],["Fondant au chocolat","dessert",40,80,"1 part"],["Gâteau au yaourt","dessert",50,70,"1 part"],["Galette des rois frangipane","dessert",40,120,"1 part"],["Bûche de Noël","dessert",40,100,"1 part"],["Tiramisu","dessert",25,120,"1 portion"],["Glace (2 boules)","dessert",25,100,"2 boules"],["Sorbet","dessert",30,100,"2 boules"],["Cône glacé","dessert",33,75,"1 cône"],["Bonbons","dessert",80,20,"1 petit sachet"],["Pâte de fruits","dessert",75,15,"1 pâte de fruits"],["Guimauve","dessert",80,7,"1 guimauve"],
+["Eau, café ou thé sans sucre","boisson",0,250,"1 tasse"],["Jus d'orange","boisson",9,200,"1 verre"],["Jus de pomme","boisson",10,200,"1 verre"],["Jus multifruits","boisson",11,200,"1 verre"],["Soda au cola","boisson",11,330,"1 canette"],["Soda zéro / light","boisson",0,330,"1 canette"],["Limonade","boisson",9,250,"1 verre"],["Soda à l'orange","boisson",9,330,"1 canette"],["Thé glacé","boisson",7,330,"1 canette"],["Sirop dilué","boisson",6,250,"1 verre"],["Boisson énergisante","boisson",11,250,"1 canette"],["Smoothie","boisson",12,250,"1 bouteille"],["Lait chocolaté","boisson",10,250,"1 bol"],["Chocolat chaud","boisson",11,250,"1 tasse"],["Bière blonde","boisson",3,250,"1 demi"],["Cidre","boisson",4,250,"1 bolée"],["Vin rouge ou blanc sec","boisson",0,125,"1 verre"],["Vin doux / moelleux","boisson",10,100,"1 verre"],["Pastis","boisson",2,25,"1 dose"],["Kir","boisson",8,120,"1 verre"],
+["Chips","snack",50,30,"1 petit sachet"],["Biscuits apéritif","snack",60,30,"1 poignée"],["Pop-corn sucré","snack",78,30,"1 petit sachet"],["Pop-corn salé","snack",57,30,"1 petit sachet"],["Cacahuètes grillées","snack",8,30,"1 poignée"],["Amandes","snack",5,30,"1 poignée"],["Noix de cajou","snack",27,30,"1 poignée"],["Olives","snack",1,30,"quelques olives"],["Houmous","snack",14,50,"2 c. à soupe"],["Tarama","snack",5,40,"2 c. à soupe"],["Gressins","snack",68,20,"4 gressins"],
+["Ketchup","sauce",25,15,"1 c. à soupe"],["Mayonnaise","sauce",1,15,"1 c. à soupe"],["Moutarde","sauce",3,10,"1 c. à café"],["Vinaigrette","sauce",2,15,"1 c. à soupe"],["Sauce tomate","sauce",8,100,"1 louche"],["Sauce béchamel","sauce",9,100,"1 louche"],["Sauce barbecue","sauce",40,15,"1 c. à soupe"],["Sauce soja","sauce",5,15,"1 c. à soupe"],["Crème de balsamique","sauce",45,10,"1 filet"]
+];
+const FOODS=F.map((r,i)=>({id:"b"+i,name:r[0],cat:r[1],c:r[2],pg:r[3],pl:r[4]}));
+
+/* ============ Utilitaires ============ */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const norm=s=>String(s).normalize("NFD").replace(/[\u0300-\u036f]/g,"").toLowerCase();
+const uid=()=>Date.now().toString(36)+Math.random().toString(36).slice(2,7);
+const pad=n=>String(n).padStart(2,"0");
+const dayKey=ts=>{const d=new Date(ts);return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());};
+const keyToDate=k=>{const [y,m,d]=k.split("-").map(Number);return new Date(y,m-1,d);};
+const hm=ts=>{const d=new Date(ts);return pad(d.getHours())+":"+pad(d.getMinutes());};
+const localInput=ts=>{const d=new Date(ts);return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate())+"T"+pad(d.getHours())+":"+pad(d.getMinutes());};
+const r1=x=>Math.round(x*10)/10;
+const fmtNum=x=>String(r1(x)).replace(".",",");
+const DAY=864e5;
+const MEALTYPES=["Petit-déjeuner","Déjeuner","Goûter","Dîner","Collation"];
+const mealTypeFor=ts=>{const h=new Date(ts).getHours()+new Date(ts).getMinutes()/60;return h<10.5?0:h<15?1:h<18?2:h<22.5?3:4;};
+const INS_TYPES=[["bolus","Rapide – repas"],["corr","Rapide – correction"],["basal","Lente (basale)"]];
+const INS_NAMES=["NovoRapid","Humalog","Fiasp","Lyumjev","Apidra","Insuline asparte","Insuline lispro","Lantus","Toujeo","Tresiba","Abasaglar","Levemir","Pompe à insuline"];
+
+function toast(msg){const t=document.createElement("div");t.className="toast";t.setAttribute("role","status");t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2600);}
+
+/* ============ Stockage : compte (db privé) sinon cet appareil ============ */
+const S={store:null,where:"device",meals:[],insulin:[],foods:[],gdays:{},settings:{unit:"mgdl",low:70,high:180},day:dayKey(Date.now()),tab:"journal",foodCat:"all",downloads:null,photos:{}};
+
+function memStore(){const m=new Map();return{
+  get:async(c,id)=>m.get(c+"/"+id)?.data??null,
+  set:async(c,id,d)=>{m.set(c+"/"+id,{c,id,data:d});},
+  del:async(c,id)=>{m.delete(c+"/"+id);},
+  list:async(c,since)=>[...m.values()].filter(x=>x.c===c&&(since==null||(x.data.ts||0)>=since)).map(x=>({id:x.id,...x.data}))};}
+function idbStore(){return new Promise(res=>{
+  let req;try{req=indexedDB.open("carnet-t1",1);}catch(e){return res(memStore());}
+  req.onupgradeneeded=()=>req.result.createObjectStore("kv");
+  req.onerror=()=>res(memStore());
+  req.onsuccess=()=>{const idb=req.result;const os=m=>idb.transaction("kv",m).objectStore("kv");
+    const p=r=>new Promise((a,b)=>{r.onsuccess=()=>a(r.result);r.onerror=()=>b(r.error);});
+    res({get:async(c,id)=>{const v=await p(os("readonly").get(c+"/"+id));return v?v.data:null;},
+      set:(c,id,d)=>p(os("readwrite").put({c,id,data:d},c+"/"+id)),
+      del:(c,id)=>p(os("readwrite").delete(c+"/"+id)),
+      list:async(c,since)=>{const all=await p(os("readonly").getAll());return all.filter(x=>x.c===c&&(since==null||(x.data.ts||0)>=since)).map(x=>({id:x.id,...x.data}));}});};
+});}
+function remoteStore(root){return{
+  get:async(c,id)=>{const s=await root.collection(c).doc(id).get();return s.exists?s.data():null;},
+  set:(c,id,d)=>root.collection(c).doc(id).set(d),
+  del:(c,id)=>root.collection(c).doc(id).delete(),
+  list:async(c,since)=>{let q=root.collection(c);if(since!=null)q=q.where("ts",">=",since);const s=await q.limit(1000).get();return s.docs.map(d=>({id:d.id,...d.data()}));}};}
+
+async function initStore(){
+  let db=null,user=null,dl=null;
+  if(window.claude&&typeof window.claude.use==="function"){
+    try{[db,user,dl]=await Promise.all([claude.use("db"),claude.use("user"),claude.use("downloads")]);}catch(e){}
+  }
+  S.downloads=dl;if(window.Android&&window.Android.shareFile)S.android=true;
+  if(db&&user){try{const id=await user.id();if(id){S.store=remoteStore(db.doc("data/users/"+id+"/app"));S.where="account";}}catch(e){}}
+  if(!S.store){S.store=await idbStore();S.where="device";}
+}
+async function safe(fn,msg){try{return await fn();}catch(e){console.error(e);toast(msg||"L'enregistrement a échoué. Réessayez.");throw e;}}
+
+async function loadAll(){
+  const since=Date.now()-90*DAY;
+  try{
+    const [meals,ins,foods,set]=await Promise.all([S.store.list("meals",since),S.store.list("insulin",since),S.store.list("foods"),S.store.get("settings","main")]);
+    S.meals=meals;S.insulin=ins;S.foods=foods;if(set)S.settings={...S.settings,...set};
+  }catch(e){console.error(e);toast("Impossible de lire vos données pour le moment.");}
+  await loadGlucoseRange(14);
+}
+async function loadGlucoseDay(k,force){
+  if(S.gdays[k]&&!force)return S.gdays[k];
+  try{const d=await S.store.get("glucose",k);S.gdays[k]=(d&&Array.isArray(d.r))?d.r:[];}catch(e){S.gdays[k]=[];}
+  return S.gdays[k];
+}
+async function loadGlucoseRange(n){const ks=[];for(let i=0;i<n;i++)ks.push(dayKey(Date.now()-i*DAY));await Promise.all(ks.map(k=>loadGlucoseDay(k)));}
+async function addReadings(list){ // list: [[ts,mgdl,src]]
+  const byDay={};list.forEach(r=>{(byDay[dayKey(r[0])]??=[]).push(r);});
+  let added=0;
+  for(const k of Object.keys(byDay)){
+    const cur=await loadGlucoseDay(k);const seen=new Set(cur.map(r=>Math.round(r[0]/6e4)));
+    const merged=cur.slice();byDay[k].forEach(r=>{const m=Math.round(r[0]/6e4);if(!seen.has(m)){seen.add(m);merged.push(r);added++;}});
+    merged.sort((a,b)=>a[0]-b[0]);
+    await S.store.set("glucose",k,{r:merged,ts:keyToDate(k).getTime()});S.gdays[k]=merged;
+  }
+  return added;
+}
+
+/* ============ Unités de glycémie ============ */
+const UNITS={mgdl:"mg/dL",gl:"g/L",mmol:"mmol/L"};
+const fmtG=v=>{const u=S.settings.unit;if(u==="mmol")return (v/18.016).toFixed(1).replace(".",",");if(u==="gl")return (v/100).toFixed(2).replace(".",",");return String(Math.round(v));};
+const parseG=x=>{x=parseFloat(String(x).replace(",","."));if(!isFinite(x))return NaN;const u=S.settings.unit;return u==="mmol"?x*18.016:u==="gl"?x*100:x;};
+const gState=v=>v<S.settings.low?"low":v>S.settings.high?"high":"in";
+
+/* ============ Calculs ============ */
+const dayItems=(arr,k)=>arr.filter(x=>dayKey(x.ts)===k);
+function dayStats(k){
+  const r=S.gdays[k]||[];const carbs=dayItems(S.meals,k).reduce((a,m)=>a+(m.carbs||0),0);
+  const ins=dayItems(S.insulin,k).reduce((a,i)=>a+(i.units||0),0);
+  let lo=0,hi=0,inr=0,sum=0;r.forEach(x=>{const s=gState(x[1]);s==="low"?lo++:s==="high"?hi++:inr++;sum+=x[1];});
+  const n=r.length;return{carbs,ins,n,avg:n?sum/n:null,tir:n?inr/n*100:null,low:n?lo/n*100:null,high:n?hi/n*100:null};
+}
+function lastReading(){
+  let best=null,prev=null;
+  Object.values(S.gdays).forEach(arr=>arr.forEach(r=>{if(!best||r[0]>best[0]){prev=best;best=r;}else if(!prev||r[0]>prev[0])prev=r;}));
+  // recalcul propre du précédent
+  if(best){prev=null;Object.values(S.gdays).forEach(arr=>arr.forEach(r=>{if(r[0]<best[0]&&(!prev||r[0]>prev[0]))prev=r;}));}
+  return{best,prev};
+}
+function trendArrow(best,prev){
+  if(!best||!prev)return"";const dt=(best[0]-prev[0])/6e4;if(dt<=0||dt>20)return"";
+  const rate=(best[1]-prev[1])/dt;return rate>2?"↑":rate>1?"↗":rate<-2?"↓":rate<-1?"↘":"→";
+}
+function ago(ts){const m=Math.round((Date.now()-ts)/6e4);if(m<1)return"à l'instant";if(m<60)return"il y a "+m+" min";const h=Math.floor(m/60);if(h<24)return"il y a "+h+" h"+(m%60?" "+pad(m%60):"");return"le "+new Date(ts).toLocaleDateString("fr-FR",{day:"numeric",month:"short"})+" à "+hm(ts);}
+
+/* ============ Graphique du jour ============ */
+function chartSVG(k){
+  const W=360,H=210,L=34,R=8,T=26,B=36;const pw=W-L-R,ph=H-T-B;const y0=40,y1=320;
+  const t0=keyToDate(k).getTime();const X=ts=>L+((ts-t0)/DAY)*pw;const Y=v=>T+ph-((Math.min(Math.max(v,y0),y1)-y0)/(y1-y0))*ph;
+  let s=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Glycémie, repas et insuline du ${esc(keyToDate(k).toLocaleDateString("fr-FR"))}">`;
+  s+=`<rect x="${L}" y="${Y(S.settings.high)}" width="${pw}" height="${Y(S.settings.low)-Y(S.settings.high)}" fill="var(--inrange-soft)"/>`;
+  [S.settings.low,S.settings.high,250].forEach(v=>{s+=`<line x1="${L}" x2="${W-R}" y1="${Y(v)}" y2="${Y(v)}" stroke="var(--line)" stroke-dasharray="${v===250?"2 4":"0"}"/><text x="${L-4}" y="${Y(v)+4}" text-anchor="end" font-size="10" fill="var(--muted)">${fmtG(v)}</text>`;});
+  for(let h=0;h<=24;h+=6){s+=`<text x="${X(t0+h*36e5)}" y="${H-4}" text-anchor="middle" font-size="10" fill="var(--muted)">${h}h</text>`;}
+  const r=(S.gdays[k]||[]).slice().sort((a,b)=>a[0]-b[0]);
+  let seg=[];const segs=[];r.forEach((p,i)=>{if(i&&p[0]-r[i-1][0]>35*6e4){segs.push(seg);seg=[];}seg.push(p);});if(seg.length)segs.push(seg);
+  segs.forEach(sg=>{if(sg.length>1)s+=`<polyline fill="none" stroke="var(--ink)" stroke-width="2" stroke-linejoin="round" points="${sg.map(p=>X(p[0]).toFixed(1)+","+Y(p[1]).toFixed(1)).join(" ")}"/>`;});
+  r.forEach(p=>{const st=gState(p[1]);const col=st==="low"?"var(--low)":st==="high"?"var(--high)":"var(--inrange)";
+    if(p[2]==="m"||segs.find(g=>g.length===1&&g[0]===p))s+=`<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="4" fill="${col}" stroke="var(--surface)" stroke-width="1.5"/>`;
+    else if(st!=="in")s+=`<circle cx="${X(p[0])}" cy="${Y(p[1])}" r="1.8" fill="${col}"/>`;});
+  dayItems(S.meals,k).forEach(m=>{const x=X(m.ts);s+=`<line x1="${x}" x2="${x}" y1="${T}" y2="${T+ph}" stroke="var(--carb)" stroke-opacity=".35"/><circle cx="${x}" cy="${H-B+10}" r="9" fill="var(--carb)"/><text x="${x}" y="${H-B+13.5}" text-anchor="middle" font-size="9" font-weight="700" fill="#fff">${Math.round(m.carbs||0)}</text>`;});
+  dayItems(S.insulin,k).forEach(i=>{const x=X(i.ts);const col="var(--insulin)";s+=`<path d="M${x-7} ${T-18} L${x+7} ${T-18} L${x} ${T-6}Z" fill="${i.type==="basal"?"none":col}" stroke="${col}" stroke-width="1.5"/><text x="${x}" y="${T-21}" text-anchor="middle" font-size="9" font-weight="700" fill="${col}">${fmtNum(i.units)}</text>`;});
+  if(!r.length)s+=`<text x="${L+pw/2}" y="${T+ph/2}" text-anchor="middle" font-size="12" fill="var(--muted)">Aucune glycémie ce jour</text>`;
+  return s+"</svg>";
+}
+const legend=()=>`<div class="legend"><span><i style="background:var(--inrange-soft);border:1px solid var(--inrange)"></i>Cible ${fmtG(S.settings.low)}–${fmtG(S.settings.high)}</span><span><i style="background:var(--carb)"></i>Repas (g de glucides)</span><span><i style="background:var(--insulin)"></i>Insuline (U)</span></div>`;
+
+/* ============ Rendu ============ */
+function header(){
+  const {best,prev}=lastReading();let h="";
+  if(best){const st=gState(best[1]);const stale=Date.now()-best[0]>30*6e4;
+    h+=`<section class="now" aria-label="Dernière glycémie"><div class="val num state-${stale?"none":st}">${fmtG(best[1])}<small>${UNITS[S.settings.unit]}</small></div><div class="trend state-${stale?"none":st}" aria-label="Tendance">${stale?"":trendArrow(best,prev)}</div><div class="meta">Dernière glycémie ${ago(best[0])}${st==="low"?" · sous la cible":st==="high"?" · au-dessus de la cible":" · dans la cible"}</div></section>`;
+    if(st==="low"&&!stale)h+=`<div class="alert" role="alert">Glycémie basse<span>Appliquez votre protocole de resucrage (souvent 15 g de sucre rapide) et recontrôlez 15 minutes après.</span></div>`;
+  }else h+=`<section class="now"><div class="val state-none">—<small>${UNITS[S.settings.unit]}</small></div><div class="meta">Aucune glycémie enregistrée. Ajoutez-en une ou importez votre capteur dans l'onglet Glycémie.</div></section>`;
+  const st=dayStats(dayKey(Date.now()));
+  h+=`<div class="tiles"><div class="tile carb"><b class="num">${Math.round(st.carbs)} g</b><span>glucides aujourd'hui</span></div><div class="tile ins"><b class="num">${fmtNum(st.ins)} U</b><span>insuline aujourd'hui</span></div><div class="tile tir"><b class="num">${st.tir==null?"—":Math.round(st.tir)+" %"}</b><span>dans la cible</span></div></div>`;
+  return h;
+}
+function dayNav(){
+  const d=keyToDate(S.day);const today=S.day===dayKey(Date.now());
+  const label=today?"Aujourd'hui":d.toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"});
+  return `<div class="daynav"><button class="iconbtn" data-act="prevday" aria-label="Jour précédent">‹</button><strong>${label}</strong><button class="iconbtn" data-act="nextday" aria-label="Jour suivant" ${today?"disabled":""}>›</button></div>`;
+}
+function eventList(k,filter){
+  const ev=[];
+  if(!filter||filter==="meal")dayItems(S.meals,k).forEach(m=>ev.push({ts:m.ts,k:"meal",o:m}));
+  if(!filter||filter==="ins")dayItems(S.insulin,k).forEach(i=>ev.push({ts:i.ts,k:"ins",o:i}));
+  if(!filter||filter==="glu")(S.gdays[k]||[]).forEach(r=>{if(r[2]==="m"||filter==="glu")ev.push({ts:r[0],k:"glu",o:r});});
+  ev.sort((a,b)=>b.ts-a.ts);
+  if(!ev.length)return `<div class="empty">Rien de noté pour ce jour.</div>`;
+  return `<ul class="list">`+ev.map(e=>{
+    if(e.k==="meal"){const m=e.o;const ph=S.photos[m.id];
+      return `<li class="item"><button class="row" data-act="openmeal" data-id="${m.id}"><span class="time num">${hm(m.ts)}</span>${m.hasPhoto?`<img class="thumb" data-photo="${m.id}" alt="" ${ph?`src="${ph}"`:""}>`:`<span class="thumb" aria-hidden="true">🍽</span>`}<span class="body"><span class="t">${esc(MEALTYPES[m.type]||"Repas")}</span><span class="s">${esc((m.items||[]).map(x=>x.name).join(", ")||m.note||"")}</span></span><span class="amt num" style="color:var(--carb)">${Math.round(m.carbs||0)} g</span></button></li>`;}
+    if(e.k==="ins"){const i=e.o;const t=(INS_TYPES.find(x=>x[0]===i.type)||[,"Insuline"])[1];
+      return `<li class="item"><button class="row" data-act="openins" data-id="${i.id}"><span class="time num">${hm(i.ts)}</span><span class="dot ins">U</span><span class="body"><span class="t">${esc(t)}</span><span class="s">${esc(i.name||"")}${i.note?" · "+esc(i.note):""}</span></span><span class="amt num" style="color:var(--insulin)">${fmtNum(i.units)} U</span></button></li>`;}
+    const r=e.o;const st=gState(r[1]);
+    return `<li class="item"><button class="row" data-act="openglu" data-ts="${r[0]}" data-day="${k}"><span class="time num">${hm(r[0])}</span><span class="dot glu" style="background:var(--${st==="in"?"inrange":st}-soft);color:var(--${st==="in"?"inrange":st})">${fmtG(r[1])}</span><span class="body"><span class="t">Glycémie</span><span class="s">${r[2]==="m"?"Saisie manuelle":"Capteur (import)"}</span></span></button></li>`;
+  }).join("")+`</ul>`;
+}
+async function hydratePhotos(){
+  const imgs=[...document.querySelectorAll("img[data-photo]:not([src])")];
+  for(const img of imgs){const id=img.dataset.photo;if(S.photos[id]===undefined){try{const p=await S.store.get("photos",id);S.photos[id]=p?.d||"";}catch(e){S.photos[id]="";}}
+    if(S.photos[id])img.src=S.photos[id];}
+}
+function footer(){return `<p class="foot">${S.where==="account"?"Vos données sont enregistrées dans votre espace privé de cette application, visible par vous seul.":"Vos données sont enregistrées sur cet appareil uniquement."} Cet outil sert de carnet : il ne remplace pas l'avis de votre diabétologue, ni les protocoles établis avec votre équipe soignante.</p>`;}
+
+function render(){
+  const app=$("#app");let h=header();
+  if(S.tab==="journal"){
+    h+=dayNav()+`<div class="chart">${chartSVG(S.day)}${legend()}</div>`;
+    const st=dayStats(S.day);
+    h+=`<h2>Journal</h2><div class="panel">${eventList(S.day)}</div>`;
+    h+=`<div class="row2" style="margin-top:14px"><button class="btn carb" data-act="newmeal">Noter un repas</button><button class="btn ins" data-act="newins">Noter l'insuline</button></div>`;
+    if(S.day!==dayKey(Date.now()))h+=`<p class="hint" style="margin-top:12px">Ce jour : ${Math.round(st.carbs)} g de glucides, ${fmtNum(st.ins)} U d'insuline${st.tir!=null?", "+Math.round(st.tir)+" % dans la cible":""}.</p>`;
+  }
+  else if(S.tab==="glucose")h+=glucoseView();
+  else if(S.tab==="insulin")h+=insulinView();
+  else if(S.tab==="foods")h+=foodsView();
+  h+=footer();app.innerHTML=h;hydratePhotos();
+  document.querySelectorAll(".tabs button").forEach(b=>{if(b.dataset.tab===S.tab)b.setAttribute("aria-current","page");else b.removeAttribute("aria-current");});
+  if(S.tab==="foods")bindFoodSearch();
+}
+
+function glucoseView(){
+  let h=dayNav()+`<div class="chart">${chartSVG(S.day)}${legend()}</div>`;
+  h+=`<div class="row2" style="margin-top:14px"><button class="btn" data-act="newglu">Ajouter une glycémie</button><button class="btn sec" data-act="import">Importer mon capteur</button></div>`;
+  const ks=[];for(let i=0;i<14;i++)ks.push(dayKey(Date.now()-i*DAY));
+  let n=0,lo=0,hi=0,sum=0;ks.forEach(k=>(S.gdays[k]||[]).forEach(r=>{n++;sum+=r[1];const s=gState(r[1]);if(s==="low")lo++;else if(s==="high")hi++;}));
+  h+=`<h2>14 derniers jours</h2>`;
+  if(n){const tir=(n-lo-hi)/n*100;
+    h+=`<div class="card"><div class="bar" aria-hidden="true"><i style="width:${lo/n*100}%;background:var(--low)"></i><i style="width:${tir}%;background:var(--inrange)"></i><i style="width:${hi/n*100}%;background:var(--high)"></i></div>
+    <div class="stats" style="margin-top:10px"><div><b class="num" style="font-size:22px;color:var(--inrange)">${Math.round(tir)} %</b><br><span class="hint">dans la cible</span></div><div><b class="num" style="font-size:22px">${fmtG(sum/n)}</b><br><span class="hint">moyenne (${UNITS[S.settings.unit]})</span></div><div><b class="num" style="font-size:22px;color:var(--low)">${Math.round(lo/n*100)} %</b><br><span class="hint">sous la cible</span></div><div><b class="num" style="font-size:22px;color:var(--high)">${Math.round(hi/n*100)} %</b><br><span class="hint">au-dessus</span></div></div>
+    <p class="hint">${n} mesures. Indicateurs à discuter avec votre diabétologue.</p></div>`;}
+  else h+=`<div class="card"><p class="hint" style="margin:0">Pas encore de mesures sur 14 jours.</p></div>`;
+  h+=`<h2>Capteur en continu</h2><div class="card"><p style="margin-top:0">Pour intégrer les données de votre capteur (FreeStyle Libre, Dexcom…), exportez-les en CSV puis importez le fichier ici :</p>
+  <p class="hint"><b>FreeStyle Libre :</b> sur libreview.com, ouvrez les rapports et téléchargez vos données de glucose (fichier CSV).<br><b>Dexcom :</b> sur clarity.dexcom.eu, utilisez l'export des données (icône en haut à droite).</p>
+  <p class="hint">L'import ne se fait que lorsque vous choisissez un fichier : l'application n'accède à rien sans votre action.</p></div>`;
+  h+=`<h2>Réglages</h2><div class="card"><label class="f">Unité d'affichage</label><div class="chips" role="group" aria-label="Unité">${Object.entries(UNITS).map(([k,v])=>`<button class="chip" data-act="unit" data-u="${k}" aria-pressed="${S.settings.unit===k}">${v}</button>`).join("")}</div>
+  <div class="row2"><div><label class="f" for="sLow">Cible basse (${UNITS[S.settings.unit]})</label><input class="i num" id="sLow" inputmode="decimal" value="${fmtG(S.settings.low)}"></div><div><label class="f" for="sHigh">Cible haute (${UNITS[S.settings.unit]})</label><input class="i num" id="sHigh" inputmode="decimal" value="${fmtG(S.settings.high)}"></div></div>
+  <button class="btn sec block" style="margin-top:12px" data-act="savetarget">Enregistrer la cible</button>
+  ${(S.downloads||S.android)?`<button class="btn sec block" style="margin-top:10px" data-act="export">Exporter mon carnet (CSV, 30 jours)</button>`:""}</div>`;
+  h+=`<h2>Mesures du jour</h2><div class="panel">${eventList(S.day,"glu")}</div>`;
+  return h;
+}
+function insulinView(){
+  let h=dayNav()+`<button class="btn ins block" data-act="newins" style="margin:6px 0 4px">Noter une injection</button>`;
+  const ks=[];for(let i=0;i<7;i++)ks.push(dayKey(Date.now()-i*DAY));
+  const rows=ks.map(k=>{const it=dayItems(S.insulin,k);const b=it.filter(x=>x.type!=="basal").reduce((a,x)=>a+x.units,0);const l=it.filter(x=>x.type==="basal").reduce((a,x)=>a+x.units,0);return{k,b,l};});
+  const max=Math.max(1,...rows.map(r=>r.b+r.l));
+  h+=`<h2>Journée</h2><div class="panel">${eventList(S.day,"ins")}</div><h2>7 derniers jours</h2><div class="card">`+rows.map(r=>`<div style="display:grid;grid-template-columns:70px 1fr 64px;gap:8px;align-items:center;margin:6px 0"><span class="hint" style="margin:0">${keyToDate(r.k).toLocaleDateString("fr-FR",{weekday:"short",day:"numeric"})}</span><div class="bar" style="margin:0;background:var(--bg)"><i style="width:${r.b/max*100}%;background:var(--insulin)"></i><i style="width:${r.l/max*100}%;background:var(--insulin-soft);border-left:1px solid var(--surface)"></i></div><b class="num" style="text-align:right">${fmtNum(r.b+r.l)} U</b></div>`).join("")+`<p class="hint">Foncé : rapide · clair : lente</p></div>`;
+  return h;
+}
+function foodsView(){
+  let h=`<h2>Aliments</h2><p class="hint">${FOODS.length+S.foods.length} aliments. Valeurs indicatives de glucides : vérifiez l'étiquette des produits emballés.</p>`;
+  h+=`<input class="i" id="fq" type="search" placeholder="Rechercher (ex. baguette, couscous…)" aria-label="Rechercher un aliment" autocomplete="off">`;
+  h+=`<div class="chips scroll" style="margin-top:10px" role="group" aria-label="Catégories"><button class="chip" data-act="cat" data-c="all" aria-pressed="${S.foodCat==="all"}">Tout</button><button class="chip" data-act="cat" data-c="mine" aria-pressed="${S.foodCat==="mine"}">Mes aliments</button>${Object.entries(CATS).map(([k,v])=>`<button class="chip" data-act="cat" data-c="${k}" aria-pressed="${S.foodCat===k}">${v}</button>`).join("")}</div>`;
+  h+=`<button class="btn sec block" data-act="newfood" style="margin:10px 0">Ajouter un aliment personnel</button><div class="card" id="flist" style="padding:4px 14px"></div>`;
+  return h;
+}
+function allFoods(){return[...S.foods.map(f=>({...f,mine:true})),...FOODS];}
+function searchFoods(q,cat){
+  const nq=norm(q.trim());let list=allFoods();
+  if(cat==="mine")list=list.filter(f=>f.mine);else if(cat&&cat!=="all")list=list.filter(f=>f.cat===cat);
+  if(nq){const words=nq.split(/\s+/);list=list.filter(f=>{const n=norm(f.name);return words.every(w=>n.includes(w));}).sort((a,b)=>norm(a.name).indexOf(nq)-norm(b.name).indexOf(nq)||(b.mine?1:0)-(a.mine?1:0));}
+  return list;
+}
+function bindFoodSearch(){
+  const q=$("#fq"),out=$("#flist");const draw=()=>{const list=searchFoods(q.value,S.foodCat);
+    out.innerHTML=list.length?list.slice(0,150).map(f=>`<div class="food"><div>${esc(f.name)}${f.mine?" ✎":""}<small>${esc(CATS[f.cat]||"")} · ${esc(f.pl)} (${f.pg} g)</small></div><div class="g num">${fmtNum(f.c*f.pg/100)} g<small>${fmtNum(f.c)} g / 100 g</small></div></div>`).join("")+(list.length>150?`<p class="hint">Affinez la recherche pour voir plus.</p>`:""):`<div class="empty">Aucun aliment trouvé. Ajoutez-le comme aliment personnel.</div>`;};
+  q.addEventListener("input",draw);draw();
+}
+
+/* ============ Feuilles (formulaires) ============ */
+function openSheet(title,html,onMount){
+  closeSheet();const bg=document.createElement("div");bg.className="sheet-bg";bg.id="sheetbg";
+  bg.innerHTML=`<div class="sheet" role="dialog" aria-modal="true" aria-label="${esc(title)}"><div class="sheet-head"><h2>${esc(title)}</h2><button class="iconbtn" data-close aria-label="Fermer">✕</button></div>${html}</div>`;
+  bg.addEventListener("click",e=>{if(e.target===bg||e.target.closest("[data-close]"))closeSheet();});
+  document.body.appendChild(bg);document.body.style.overflow="hidden";onMount&&onMount(bg);
+  const f=bg.querySelector("input,select,textarea,button:not([data-close])");f&&f.focus({preventScroll:true});
+}
+function closeSheet(){const b=$("#sheetbg");if(b)b.remove();document.body.style.overflow="";}
+document.addEventListener("keydown",e=>{if(e.key==="Escape")closeSheet();});
+
+function compressImage(file){return new Promise((res,rej)=>{const fr=new FileReader();fr.onerror=rej;fr.onload=()=>{const img=new Image();img.onerror=rej;img.onload=()=>{
+  let max=720,q=.72,out="";for(let i=0;i<5;i++){const sc=Math.min(1,max/Math.max(img.width,img.height));const c=document.createElement("canvas");c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);c.getContext("2d").drawImage(img,0,0,c.width,c.height);out=c.toDataURL("image/jpeg",q);if(out.length<180000)break;max*=.8;q-=.08;}
+  res(out);};img.src=fr.result;};fr.readAsDataURL(file);});}
+
+function mealSheet(){
+  const now=Date.now();const M={id:uid(),ts:now,type:mealTypeFor(now),items:[],photo:"",note:""};
+  const html=`<button class="photo-drop" id="phBtn" type="button"><span>📷 Prendre ou choisir une photo</span></button><input id="phIn" type="file" accept="image/*" capture="environment" class="hidden">
+  <div class="row2"><div><label class="f" for="mTs">Heure</label><input class="i" type="datetime-local" id="mTs" value="${localInput(now)}"></div><div><label class="f" for="mType">Repas</label><select class="i" id="mType">${MEALTYPES.map((t,i)=>`<option value="${i}" ${i===M.type?"selected":""}>${t}</option>`).join("")}</select></div></div>
+  <label class="f" for="mq">Ajouter un aliment</label><input class="i" id="mq" type="search" placeholder="Rechercher : pâtes, baguette, yaourt…" autocomplete="off"><div class="results hidden" id="mres"></div>
+  <div id="mlines" style="margin-top:8px"></div>
+  <div class="row2" style="margin-top:8px"><input class="i num" id="manC" inputmode="decimal" placeholder="Glucides libres (g)" aria-label="Glucides à ajouter manuellement"><button class="btn sec" id="manAdd" type="button">Ajouter</button></div>
+  <div class="total"><span>Total glucides</span><b class="num" id="mTot">0 g</b></div>
+  <label class="f" for="mNote">Note</label><textarea class="i" id="mNote" placeholder="Restaurant, sport prévu…"></textarea>
+  <button class="btn carb block" id="mSave" style="margin-top:14px">Enregistrer le repas</button>`;
+  openSheet("Nouveau repas",html,root=>{
+    const lines=root.querySelector("#mlines"),tot=root.querySelector("#mTot"),res=root.querySelector("#mres"),q=root.querySelector("#mq");
+    const calc=it=>it.g*it.c/100;
+    const draw=()=>{lines.innerHTML=M.items.map((it,i)=>`<div class="line"><div class="n">${esc(it.name)}<small>${it.manual?"saisie libre":fmtNum(it.c)+" g / 100 g · "+esc(it.pl||"")}</small></div>${it.manual?`<span></span>`:`<input class="i num" inputmode="decimal" data-i="${i}" value="${it.g}" aria-label="Quantité en grammes de ${esc(it.name)}">`}<span class="c num">${fmtNum(calc(it))} g</span><button class="x" data-rm="${i}" aria-label="Retirer ${esc(it.name)}">✕</button></div>`).join("")+(M.items.length?`<p class="hint" style="margin:6px 0 0">Quantités en grammes (ou ml).</p>`:"");
+      tot.textContent=fmtNum(M.items.reduce((a,it)=>a+calc(it),0))+" g";};
+    lines.addEventListener("input",e=>{const i=e.target.dataset.i;if(i==null)return;const v=parseFloat(e.target.value.replace(",","."));M.items[i].g=isFinite(v)?v:0;
+      e.target.closest(".line").querySelector(".c").textContent=fmtNum(calc(M.items[i]))+" g";tot.textContent=fmtNum(M.items.reduce((a,it)=>a+calc(it),0))+" g";});
+    lines.addEventListener("click",e=>{const i=e.target.dataset.rm;if(i!=null){M.items.splice(i,1);draw();}});
+    q.addEventListener("input",()=>{if(!q.value.trim()){res.classList.add("hidden");return;}const list=searchFoods(q.value,"all").slice(0,25);res.classList.remove("hidden");
+      res.innerHTML=list.length?list.map(f=>`<button type="button" data-f="${f.id}"><span>${esc(f.name)}<br><small>${esc(f.pl)} (${f.pg} g)</small></span><small class="num">${fmtNum(f.c*f.pg/100)} g</small></button>`).join(""):`<div class="empty" style="padding:12px">Aucun résultat. Utilisez « Glucides libres » ou ajoutez l'aliment dans l'onglet Aliments.</div>`;});
+    res.addEventListener("click",e=>{const b=e.target.closest("button[data-f]");if(!b)return;const f=allFoods().find(x=>x.id===b.dataset.f);if(!f)return;
+      M.items.push({name:f.name,c:f.c,g:f.pg,pl:f.pl});q.value="";res.classList.add("hidden");draw();q.focus();});
+    root.querySelector("#manAdd").addEventListener("click",()=>{const v=parseFloat(root.querySelector("#manC").value.replace(",","."));if(!(v>0))return;M.items.push({name:"Glucides ajoutés",c:100,g:v,manual:true});root.querySelector("#manC").value="";draw();});
+    const phIn=root.querySelector("#phIn"),phBtn=root.querySelector("#phBtn");
+    phBtn.addEventListener("click",()=>phIn.click());
+    phIn.addEventListener("change",async()=>{const f=phIn.files[0];if(!f)return;phBtn.innerHTML="<span>Préparation de la photo…</span>";try{M.photo=await compressImage(f);phBtn.innerHTML=`<img src="${M.photo}" alt="Photo du repas">`;}catch(e){phBtn.innerHTML="<span>Photo illisible. Réessayez avec une autre image.</span>";}});
+    root.querySelector("#mTs").addEventListener("change",e=>{const t=new Date(e.target.value).getTime();if(t){M.ts=t;root.querySelector("#mType").value=mealTypeFor(t);}});
+    root.querySelector("#mSave").addEventListener("click",async e=>{
+      M.ts=new Date(root.querySelector("#mTs").value).getTime()||M.ts;M.type=+root.querySelector("#mType").value;M.note=root.querySelector("#mNote").value.trim();
+      if(!M.items.length&&!M.photo&&!M.note){toast("Ajoutez au moins un aliment, une photo ou une note.");return;}
+      e.target.disabled=true;const carbs=r1(M.items.reduce((a,it)=>a+calc(it),0));
+      const doc={ts:M.ts,type:M.type,items:M.items.map(it=>({name:it.name,c:it.c,g:it.g,...(it.manual?{manual:true}:{})})),carbs,note:M.note,hasPhoto:!!M.photo};
+      try{if(M.photo){await S.store.set("photos",M.id,{d:M.photo,ts:M.ts});S.photos[M.id]=M.photo;}await S.store.set("meals",M.id,doc);}
+      catch(err){console.error(err);e.target.disabled=false;toast("Le repas n'a pas pu être enregistré. Réessayez.");return;}
+      S.meals.push({id:M.id,...doc});S.day=dayKey(M.ts);closeSheet();if(S.tab!=="journal")S.tab="journal";render();
+      askInsulinAfterMeal({id:M.id,ts:M.ts,carbs});
+    });
+    draw();
+  });
+}
+function askInsulinAfterMeal(m){
+  openSheet("Repas enregistré",`<p>${Math.round(m.carbs)} g de glucides notés à ${hm(m.ts)}.</p><div class="row2"><button class="btn sec" data-close>Plus tard</button><button class="btn ins" id="goIns">Noter l'insuline</button></div>`,root=>{
+    root.querySelector("#goIns").addEventListener("click",()=>insulinSheet({ts:m.ts,type:"bolus",meal:m.id}));});
+}
+function lastName(type){const l=S.insulin.filter(i=>i.type===type&&i.name).sort((a,b)=>b.ts-a.ts)[0];return l?l.name:"";}
+function insulinSheet(pre={}){
+  const I={type:pre.type||"bolus",ts:pre.ts||Date.now()};
+  const html=`<label class="f">Type</label><div class="chips" role="group" aria-label="Type d'insuline">${INS_TYPES.map(([k,v])=>`<button class="chip" type="button" data-t="${k}" aria-pressed="${k===I.type}">${v}</button>`).join("")}</div>
+  <div class="row2"><div><label class="f" for="iU">Unités</label><input class="i num" id="iU" inputmode="decimal" placeholder="ex. 4,5" style="font-size:24px;font-weight:700"></div><div><label class="f" for="iTs">Heure</label><input class="i" type="datetime-local" id="iTs" value="${localInput(I.ts)}"></div></div>
+  <label class="f" for="iName">Insuline</label><input class="i" id="iName" list="insNames" value="${esc(lastName(I.type))}" placeholder="ex. NovoRapid, Tresiba…"><datalist id="insNames">${INS_NAMES.map(n=>`<option value="${n}">`).join("")}</datalist>
+  <label class="f" for="iNote">Note</label><input class="i" id="iNote" placeholder="Site d'injection, stylo, pompe…">
+  <p class="hint">Notez la dose que vous avez réellement faite, selon le schéma défini avec votre médecin.</p>
+  <button class="btn ins block" id="iSave">Enregistrer l'injection</button>`;
+  openSheet("Insuline",html,root=>{
+    root.querySelectorAll("[data-t]").forEach(b=>b.addEventListener("click",()=>{I.type=b.dataset.t;root.querySelectorAll("[data-t]").forEach(x=>x.setAttribute("aria-pressed",x===b));const n=root.querySelector("#iName");const ln=lastName(I.type);if(ln)n.value=ln;}));
+    root.querySelector("#iSave").addEventListener("click",async e=>{
+      const u=parseFloat(root.querySelector("#iU").value.replace(",","."));if(!(u>0&&u<200)){toast("Indiquez un nombre d'unités valide.");root.querySelector("#iU").focus();return;}
+      const doc={ts:new Date(root.querySelector("#iTs").value).getTime()||I.ts,type:I.type,units:r1(u),name:root.querySelector("#iName").value.trim(),note:root.querySelector("#iNote").value.trim(),...(pre.meal?{meal:pre.meal}:{})};
+      const id=uid();e.target.disabled=true;
+      try{await S.store.set("insulin",id,doc);}catch(err){e.target.disabled=false;toast("L'injection n'a pas pu être enregistrée. Réessayez.");return;}
+      S.insulin.push({id,...doc});S.day=dayKey(doc.ts);closeSheet();render();toast(fmtNum(doc.units)+" U enregistrées");
+    });
+  });
+}
+function glucoseSheet(){
+  const html=`<div class="row2"><div><label class="f" for="gV">Glycémie (${UNITS[S.settings.unit]})</label><input class="i num" id="gV" inputmode="decimal" style="font-size:24px;font-weight:700" placeholder="${S.settings.unit==="gl"?"1,20":S.settings.unit==="mmol"?"6,5":"120"}"></div><div><label class="f" for="gTs">Heure</label><input class="i" type="datetime-local" id="gTs" value="${localInput(Date.now())}"></div></div>
+  <button class="btn block" id="gSave" style="margin-top:14px">Enregistrer la glycémie</button>`;
+  openSheet("Glycémie",html,root=>{root.querySelector("#gSave").addEventListener("click",async e=>{
+    const v=parseG(root.querySelector("#gV").value);if(!(v>=20&&v<=600)){toast("Valeur hors limites : vérifiez l'unité ("+UNITS[S.settings.unit]+").");return;}
+    const ts=new Date(root.querySelector("#gTs").value).getTime()||Date.now();e.target.disabled=true;
+    try{await addReadings([[ts,Math.round(v),"m"]]);}catch(err){e.target.disabled=false;toast("La glycémie n'a pas pu être enregistrée.");return;}
+    S.day=dayKey(ts);closeSheet();render();});});
+}
+
+/* ============ Import CSV capteur (LibreView, Dexcom Clarity, générique) ============ */
+function splitCSV(line,sep){const out=[];let cur="",q=false;for(let i=0;i<line.length;i++){const ch=line[i];if(q){if(ch==='"'){if(line[i+1]==='"'){cur+='"';i++;}else q=false;}else cur+=ch;}else if(ch==='"')q=true;else if(ch===sep){out.push(cur);cur="";}else cur+=ch;}out.push(cur);return out.map(s=>s.trim());}
+function parseDate(s){
+  s=s.trim();let m;
+  if((m=s.match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{1,2}):(\d{2})(?::(\d{2}))?/)))return new Date(+m[1],m[2]-1,+m[3],+m[4],+m[5],+(m[6]||0)).getTime();
+  if((m=s.match(/^(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})[ T](\d{1,2}):(\d{2})(?::(\d{2}))?\s*(AM|PM)?/i))){let h=+m[4];if(m[7]){if(/pm/i.test(m[7])&&h<12)h+=12;if(/am/i.test(m[7])&&h===12)h=0;}
+    let d=+m[1],mo=+m[2];if(m[7]&&mo>12){[d,mo]=[mo,d];}return new Date(+m[3],mo-1,d,h,+m[5],+(m[6]||0)).getTime();}
+  const t=Date.parse(s);return isFinite(t)?t:NaN;
+}
+function parseSensorCSV(text){
+  const lines=text.replace(/\r/g,"").split("\n").filter(l=>l.trim());
+  const head=lines.slice(0,5).join("");const sep=(head.match(/;/g)||[]).length>(head.match(/,/g)||[]).length?";":head.includes("\t")?"\t":",";
+  let hi=-1,cols;
+  for(let i=0;i<Math.min(lines.length,30);i++){const c=splitCSV(lines[i],sep).map(norm);if(c.some(x=>/horodatage|timestamp|date|heure|time/.test(x))&&c.some(x=>/gluc|glyc|\bbg\b/.test(x))){hi=i;cols=c;break;}}
+  if(hi<0)return{err:"Colonnes non reconnues : le fichier doit contenir une date/heure et une valeur de glucose."};
+  const tCol=cols.findIndex(x=>/horodatage|timestamp/.test(x))>=0?cols.findIndex(x=>/horodatage|timestamp/.test(x)):cols.findIndex(x=>/date|heure|time/.test(x));
+  const gCols=cols.map((x,i)=>/gluc|glyc|\bbg\b/.test(x)&&!/type|insulin|glucide|carb|cetone|keton|alerte|alert|taux de chang|rate/.test(x)?i:-1).filter(i=>i>=0&&i!==tCol);
+  const mmol=gCols.some(i=>/mmol/.test(cols[i]));const out=[];
+  for(let i=hi+1;i<lines.length;i++){const c=splitCSV(lines[i],sep);const ts=parseDate(c[tCol]||"");if(!isFinite(ts))continue;
+    for(const gi of gCols){let raw=(c[gi]||"").trim();if(!raw)continue;let v;
+      if(/^(bas|low)/i.test(raw))v=40;else if(/^(eleve|élevé|haut|high)/i.test(raw))v=400;else{v=parseFloat(raw.replace(",","."));if(!isFinite(v))continue;if(mmol||v<35)v=v*18.016;}
+      if(v>=20&&v<=600){out.push([ts,Math.round(v),"c"]);break;}}}
+  if(!out.length)return{err:"Aucune valeur de glucose lisible dans ce fichier."};
+  return{rows:out};
+}
+function importSheet(){
+  openSheet("Importer mon capteur",`<p class="hint">Choisissez le fichier CSV exporté depuis LibreView ou Dexcom Clarity. Les mesures déjà présentes ne sont pas dupliquées.</p><input id="csvIn" type="file" accept=".csv,.txt,text/csv" class="hidden"><button class="btn block" id="csvBtn">Choisir le fichier</button><p id="csvOut" class="hint" aria-live="polite"></p>`,root=>{
+    const inp=root.querySelector("#csvIn"),out=root.querySelector("#csvOut");root.querySelector("#csvBtn").addEventListener("click",()=>inp.click());
+    inp.addEventListener("change",async()=>{const f=inp.files[0];if(!f)return;out.textContent="Lecture du fichier…";
+      const r=parseSensorCSV(await f.text());if(r.err){out.textContent=r.err;return;}
+      out.textContent=r.rows.length+" mesures trouvées, enregistrement…";
+      try{const n=await addReadings(r.rows);const last=r.rows.reduce((a,b)=>b[0]>a?b[0]:a,0);S.day=dayKey(last);out.textContent=n+" nouvelles mesures importées.";render();setTimeout(closeSheet,1200);}
+      catch(e){console.error(e);out.textContent="L'import s'est arrêté avant la fin. Relancez-le : les mesures déjà importées ne seront pas dupliquées.";}});
+  });
+}
+
+/* ============ Détails / suppression ============ */
+async function mealDetail(id){
+  const m=S.meals.find(x=>x.id===id);if(!m)return;
+  if(m.hasPhoto&&S.photos[id]===undefined){try{const p=await S.store.get("photos",id);S.photos[id]=p?.d||"";}catch(e){S.photos[id]="";}}
+  const ins=S.insulin.filter(i=>i.meal===id);
+  openSheet(MEALTYPES[m.type]||"Repas",`${S.photos[id]?`<img class="meal-photo" src="${S.photos[id]}" alt="Photo du repas">`:""}<p class="hint">${new Date(m.ts).toLocaleDateString("fr-FR",{weekday:"long",day:"numeric",month:"long"})} à ${hm(m.ts)}</p>
+  <div class="card" style="padding:4px 14px">${(m.items||[]).map(it=>`<div class="food"><div>${esc(it.name)}<small>${it.manual?"saisie libre":it.g+" g"}</small></div><div class="g num">${fmtNum(it.g*it.c/100)} g</div></div>`).join("")||`<div class="empty">Aucun aliment détaillé.</div>`}</div>
+  <div class="total"><span>Total glucides</span><b class="num">${fmtNum(m.carbs||0)} g</b></div>${m.note?`<p>${esc(m.note)}</p>`:""}
+  ${ins.length?`<p class="hint">Insuline liée : ${ins.map(i=>fmtNum(i.units)+" U à "+hm(i.ts)).join(", ")}</p>`:`<button class="btn ins block" id="dIns" style="margin-bottom:10px">Noter l'insuline pour ce repas</button>`}
+  <button class="btn danger block" id="dDel">Supprimer ce repas</button>`,root=>{
+    root.querySelector("#dIns")?.addEventListener("click",()=>insulinSheet({ts:m.ts,type:"bolus",meal:id}));
+    root.querySelector("#dDel").addEventListener("click",async e=>{if(!confirm("Supprimer ce repas ?"))return;e.target.disabled=true;
+      try{await S.store.del("meals",id);if(m.hasPhoto)await S.store.del("photos",id);}catch(err){e.target.disabled=false;toast("Suppression impossible. Réessayez.");return;}
+      S.meals=S.meals.filter(x=>x.id!==id);closeSheet();render();toast("Repas supprimé");});
+  });
+}
+function insDetail(id){
+  const i=S.insulin.find(x=>x.id===id);if(!i)return;const t=(INS_TYPES.find(x=>x[0]===i.type)||[,"Insuline"])[1];
+  openSheet(t,`<p style="font-size:34px;font-weight:700;color:var(--insulin);margin:4px 0" class="num">${fmtNum(i.units)} U</p><p class="hint">${esc(i.name||"")} · ${new Date(i.ts).toLocaleDateString("fr-FR",{day:"numeric",month:"long"})} à ${hm(i.ts)}</p>${i.note?`<p>${esc(i.note)}</p>`:""}<button class="btn danger block" id="dDel">Supprimer cette injection</button>`,root=>{
+    root.querySelector("#dDel").addEventListener("click",async e=>{if(!confirm("Supprimer cette injection ?"))return;e.target.disabled=true;
+      try{await S.store.del("insulin",id);}catch(err){e.target.disabled=false;toast("Suppression impossible.");return;}
+      S.insulin=S.insulin.filter(x=>x.id!==id);closeSheet();render();toast("Injection supprimée");});});
+}
+function gluDetail(ts,k){
+  const r=(S.gdays[k]||[]).find(x=>x[0]===ts);if(!r)return;
+  openSheet("Glycémie",`<p style="font-size:34px;font-weight:700;margin:4px 0" class="num state-${gState(r[1])}">${fmtG(r[1])} <small style="font-size:16px;color:var(--muted)">${UNITS[S.settings.unit]}</small></p><p class="hint">${hm(r[0])} · ${r[2]==="m"?"saisie manuelle":"capteur"}</p><button class="btn danger block" id="dDel">Supprimer cette mesure</button>`,root=>{
+    root.querySelector("#dDel").addEventListener("click",async e=>{e.target.disabled=true;const arr=S.gdays[k].filter(x=>x!==r);
+      try{await S.store.set("glucose",k,{r:arr,ts:keyToDate(k).getTime()});}catch(err){e.target.disabled=false;toast("Suppression impossible.");return;}
+      S.gdays[k]=arr;closeSheet();render();});});
+}
+function newFoodSheet(){
+  openSheet("Nouvel aliment",`<label class="f" for="nfN">Nom</label><input class="i" id="nfN" placeholder="ex. Gâteau de mamie">
+  <div class="row2"><div><label class="f" for="nfC">Glucides pour 100 g</label><input class="i num" id="nfC" inputmode="decimal" placeholder="ex. 45"></div><div><label class="f" for="nfP">Portion habituelle (g)</label><input class="i num" id="nfP" inputmode="decimal" placeholder="ex. 80"></div></div>
+  <label class="f" for="nfL">Nom de la portion</label><input class="i" id="nfL" placeholder="ex. 1 part"><label class="f" for="nfCat">Catégorie</label><select class="i" id="nfCat">${Object.entries(CATS).map(([k,v])=>`<option value="${k}">${v}</option>`).join("")}</select>
+  <p class="hint">Astuce : sur l'étiquette, lisez la ligne « Glucides » du tableau nutritionnel pour 100 g.</p><button class="btn block" id="nfSave">Ajouter l'aliment</button>`,root=>{
+    root.querySelector("#nfSave").addEventListener("click",async e=>{const n=root.querySelector("#nfN").value.trim();const c=parseFloat(root.querySelector("#nfC").value.replace(",","."));const p=parseFloat(root.querySelector("#nfP").value.replace(",","."))||100;
+      if(!n||!(c>=0&&c<=100)){toast("Indiquez un nom et des glucides entre 0 et 100 g.");return;}
+      const id="u"+uid();const doc={name:n,c:r1(c),pg:r1(p),pl:root.querySelector("#nfL").value.trim()||"1 portion",cat:root.querySelector("#nfCat").value};e.target.disabled=true;
+      try{await S.store.set("foods",id,doc);}catch(err){e.target.disabled=false;toast("L'aliment n'a pas pu être ajouté.");return;}
+      S.foods.push({id,...doc});closeSheet();S.foodCat="mine";render();toast("Aliment ajouté");});});
+}
+async function exportCSV(){
+  const since=Date.now()-30*DAY;await loadGlucoseRange(30);
+  const rows=[["date","heure","type","détail","glucides (g)","insuline (U)","glycémie (mg/dL)"]];
+  S.meals.filter(m=>m.ts>=since).forEach(m=>rows.push([dayKey(m.ts),hm(m.ts),MEALTYPES[m.type]||"Repas",(m.items||[]).map(i=>i.name+" "+i.g+"g").join(" + "),m.carbs,"",""]));
+  S.insulin.filter(i=>i.ts>=since).forEach(i=>rows.push([dayKey(i.ts),hm(i.ts),"Insuline "+((INS_TYPES.find(x=>x[0]===i.type)||[,""])[1]),i.name||"","",i.units,""]));
+  Object.values(S.gdays).flat().filter(r=>r[0]>=since).forEach(r=>rows.push([dayKey(r[0]),hm(r[0]),"Glycémie",r[2]==="m"?"manuelle":"capteur","","",r[1]]));
+  const body=[rows[0],...rows.slice(1).sort((a,b)=>(a[0]+a[1]).localeCompare(b[0]+b[1]))].map(r=>r.map(x=>`"${String(x).replace(/"/g,'""')}"`).join(";")).join("\n");
+  if(S.android){try{Android.shareFile("carnet-diabete-"+dayKey(Date.now())+".csv","\ufeff"+body);}catch(e){toast("L'export n'a pas pu être proposé.");}return;}
+  try{await S.downloads.save({filename:"carnet-diabete-"+dayKey(Date.now())+".csv",data:"\ufeff"+body});}catch(e){if(e&&e.code!=="declined")toast("L'export n'a pas pu être proposé.");}
+}
+
+/* ============ Événements ============ */
+document.querySelector(".tabs").addEventListener("click",e=>{const b=e.target.closest("button[data-tab]");if(!b||!S.store)return;
+  if(b.dataset.tab==="meal"){mealSheet();return;}S.tab=b.dataset.tab;render();window.scrollTo(0,0);});
+document.addEventListener("click",async e=>{const b=e.target.closest("[data-act]");if(!b||!S.store)return;const a=b.dataset.act;
+  if(a==="prevday"||a==="nextday"){const d=keyToDate(S.day);d.setDate(d.getDate()+(a==="prevday"?-1:1));S.day=dayKey(d.getTime());await loadGlucoseDay(S.day);render();}
+  else if(a==="newmeal")mealSheet();else if(a==="newins")insulinSheet();else if(a==="newglu")glucoseSheet();else if(a==="import")importSheet();
+  else if(a==="openmeal")mealDetail(b.dataset.id);else if(a==="openins")insDetail(b.dataset.id);else if(a==="openglu")gluDetail(+b.dataset.ts,b.dataset.day);
+  else if(a==="cat"){S.foodCat=b.dataset.c;const q=$("#fq")?.value||"";render();const n=$("#fq");if(n){n.value=q;n.dispatchEvent(new Event("input"));}}
+  else if(a==="newfood")newFoodSheet();else if(a==="export")exportCSV();
+  else if(a==="unit"){S.settings.unit=b.dataset.u;render();try{await S.store.set("settings","main",S.settings);}catch(err){}}
+  else if(a==="savetarget"){const lo=parseG($("#sLow").value),hi=parseG($("#sHigh").value);if(!(lo>=50&&hi<=300&&lo<hi)){toast("Cible invalide : vérifiez les valeurs.");return;}
+    S.settings.low=Math.round(lo);S.settings.high=Math.round(hi);try{await S.store.set("settings","main",S.settings);toast("Cible enregistrée");}catch(err){toast("La cible n'a pas pu être enregistrée.");}render();}
+});
+
+(async function start(){await initStore();await loadAll();render();})();
+</script>
+</body>
+</html>
